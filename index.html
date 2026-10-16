@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Ocean Sandbox | WebGL2 Simulation</title>
+  <meta name="author" content="ilpeiris (https://github.com/ilpeiris)" />
+  <style>
+    :root {
+      --bg-panel: rgba(10, 16, 26, 0.72);
+      --border-panel: rgba(255, 255, 255, 0.14);
+      --accent: #38bdf8;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #040810;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      color: var(--text-main);
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: grab;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    /* UI Overlay */
+    #ui-container {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      width: 320px;
+      max-height: calc(100vh - 36px);
+      overflow-y: auto;
+      background: var(--bg-panel);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-panel);
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      z-index: 10;
+    }
+
+    #ui-container.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-10px);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-panel);
+    }
+
+    .panel-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .fps-badge {
+      font-size: 0.72rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      padding: 2px 7px;
+      border-radius: 999px;
+    }
+
+    .preset-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-main);
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 0.76rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+
+    .btn:hover {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.45);
+    }
+
+    .btn.active {
+      background: rgba(56, 189, 248, 0.26);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .control-group {
+      margin-bottom: 11px;
+    }
+
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .control-value {
+      color: var(--text-main);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.74rem;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.7);
+    }
+
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      margin-top: 6px;
+    }
+
+    .footer-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-panel);
+    }
+
+    .footer-actions .btn {
+      flex: 1;
+    }
+
+    /* Bottom-left help pill */
+    #hud-help {
+      position: fixed;
+      bottom: 18px;
+      left: 18px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-panel);
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    #hud-help strong {
+      color: var(--text-main);
+    }
+
+
+
+  .author-credit {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      text-align: center;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+    }
+
+    .author-credit a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: color 0.15s ease, text-shadow 0.15s ease;
+    }
+
+    .author-credit a:hover {
+      color: #fff;
+      text-shadow: 0 0 10px rgba(56, 189, 248, 0.75);
+    }
+
+
+
+  </style>
+</head>
+<body>
+
+  <canvas id="ocean-canvas"></canvas>
+
+  <div id="ui-container">
+    <div class="panel-header">
+      <div class="panel-title">🌊 Ocean Physics </div>
+      <span id="fps-counter" class="fps-badge">60 FPS</span>
+    </div>
+
+    <div class="preset-grid">
+      <button class="btn active" data-preset="golden">Golden Swell</button>
+      <button class="btn" data-preset="tropical">Midday Tropical</button>
+      <button class="btn" data-preset="storm">North Sea Storm</button>
+      <button class="btn" data-preset="moonlight">Moonlit Abyss</button>
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Wave Height</span>
+        <span class="control-value" id="val-height">0.65 m</span>
+      </div>
+      <input type="range" id="ctrl-height" min="0.10" max="1.60" step="0.01" value="0.65" />
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Wave Choppiness</span>
+        <span class="control-value" id="val-choppy">4.2</span>
+      </div>
+      <input type="range" id="ctrl-choppy" min="1.0" max="8.5" step="0.1" value="4.2" />
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Wind / Wave Speed</span>
+        <span class="control-value" id="val-speed">0.85</span>
+      </div>
+      <input type="range" id="ctrl-speed" min="0.1" max="2.5" step="0.05" value="0.85" />
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Wave Frequency (Scale)</span>
+        <span class="control-value" id="val-freq">0.16</span>
+      </div>
+      <input type="range" id="ctrl-freq" min="0.08" max="0.32" step="0.005" value="0.16" />
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Sun Elevation</span>
+        <span class="control-value" id="val-sun-el">14°</span>
+      </div>
+      <input type="range" id="ctrl-sun-el" min="-4" max="75" step="1" value="14" />
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Sun Azimuth</span>
+        <span class="control-value" id="val-sun-az">195°</span>
+      </div>
+      <input type="range" id="ctrl-sun-az" min="0" max="360" step="1" value="195" />
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Subsurface Glow (SSS)</span>
+        <span class="control-value" id="val-sss">1.00</span>
+      </div>
+      <input type="range" id="ctrl-sss" min="0.0" max="2.0" step="0.05" value="1.00" />
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Crest Foam Intensity</span>
+        <span class="control-value" id="val-foam">0.85</span>
+      </div>
+      <input type="range" id="ctrl-foam" min="0.0" max="2.0" step="0.05" value="0.85" />
+    </div>
+
+    <div class="toggle-row">
+      <span>Boat Bobbing Camera</span>
+      <input type="checkbox" id="ctrl-bob" checked />
+    </div>
+
+    <div class="toggle-row">
+      <span>Render Quality</span>
+      <select id="ctrl-quality" style="background:#0f172a;color:#f8fafc;border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:2px 6px;font-size:0.74rem;">
+        <option value="0.75">Performance (0.75x)</option>
+        <option value="1.0" selected>High (1.0x)</option>
+        <option value="1.35">Ultra (1.35x)</option>
+      </select>
+    </div>
+
+    <div class="footer-actions">
+      <button class="btn" id="btn-reset-cam">Reset View</button>
+      <button class="btn" id="btn-fullscreen">Fullscreen</button>
+    </div>
+
+
+    <div class="author-credit">
+      Crafted by <a href="https://github.com/ilpeiris" target="_blank" rel="noopener noreferrer">@ilpeiris ↗</a>
+    </div>
+  </div>
+
+  </div>
+
+  <div id="hud-help">
+    <strong>Drag</strong> Look / Orbit &nbsp;|&nbsp;
+    <strong>Scroll</strong> Altitude &nbsp;|&nbsp;
+    <strong>WASD / Arrows</strong> Glide &nbsp;|&nbsp;
+    <strong>H</strong> Toggle UI
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. WEBGL2 INITIALIZATION & SHADER SOURCE
+    // =========================================================================
+    const canvas = document.getElementById('ocean-canvas');
+    const gl = canvas.getContext('webgl2', { antialias: false, powerPreference: 'high-performance' });
+
+    if (!gl) {
+      alert('WebGL2 is required to view this 3D photorealistic ocean simulation.');
+    }
+
+    const vertexShaderSource = `#version 300 es
+      precision highp float;
+      const vec2 pos[4] = vec2[4](
+        vec2(-1.0, -1.0),
+        vec2( 1.0, -1.0),
+        vec2(-1.0,  1.0),
+        vec2( 1.0,  1.0)
+      );
+      void main() {
+        gl_Position = vec4(pos[gl_VertexID], 0.0, 1.0);
+      }
+    `;
+
+    const fragmentShaderSource = `#version 300 es
+      precision highp float;
+
+      out vec4 fragColor;
+
+      uniform vec2  uResolution;
+      uniform float uTime;
+      uniform vec3  uCamPos;
+      uniform vec3  uCamTarget;
+      uniform float uCamRoll;
+
+      // Ocean & Atmosphere Uniforms
+      uniform float uSeaHeight;
+      uniform float uSeaChoppy;
+      uniform float uSeaSpeed;
+      uniform float uSeaFreq;
+      uniform vec3  uSunDir;
+      uniform float uSSSIntensity;
+      uniform float uFoamIntensity;
+      uniform vec3  uDeepColor;
+      uniform vec3  uWaterTint;
+
+      const int   NUM_STEPS = 10;
+      const float PI        = 3.14159265359;
+      const float EPSILON   = 1e-3;
+      const mat2  OCTAVE_M  = mat2(1.6, 1.2, -1.2, 1.6);
+
+      // --- 2D Hash & Value Noise ---
+      float hash(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }
+
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return -1.0 + 2.0 * mix(
+          mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+          mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+          u.y
+        );
+      }
+
+      // --- Trochoidal / Gerstner Wave Octave ---
+      float seaOctave(vec2 uv, float choppy) {
+        uv += noise(uv);
+        vec2 wv = 1.0 - abs(sin(uv));
+        vec2 swv = abs(cos(uv));
+        wv = mix(wv, swv, wv);
+        return pow(1.0 - pow(wv.x * wv.y, 0.65), choppy);
+      }
+
+      // --- Coarse Geometry Heightfield (7 Octaves for Raymarching) ---
+      float mapGeometry(vec3 p) {
+        float freq   = uSeaFreq;
+        float amp    = uSeaHeight;
+        float choppy = uSeaChoppy;
+        vec2  uv     = p.xz;
+        uv.x *= 0.75;
+
+        float d, h = 0.0;
+        float seaTime = 1.0 + uTime * uSeaSpeed;
+
+        for (int i = 0; i < 7; i++) {
+          d  = seaOctave((uv + seaTime) * freq, choppy);
+          d += seaOctave((uv - seaTime * 0.85) * freq, choppy);
+          h += d * amp;
+          uv *= OCTAVE_M;
+          freq *= 1.92;
+          amp  *= 0.22;
+          choppy = mix(choppy, 1.0, 0.2);
+        }
+        return p.y - h;
+      }
+
+      // --- High-Detail Surface Heightfield (13 Octaves for Micro-Normals & Foam) ---
+      float mapDetailed(vec3 p) {
+        float freq   = uSeaFreq;
+        float amp    = uSeaHeight;
+        float choppy = uSeaChoppy;
+        vec2  uv     = p.xz;
+        uv.x *= 0.75;
+
+        float d, h = 0.0;
+        float seaTime = 1.0 + uTime * uSeaSpeed;
+
+        for (int i = 0; i < 13; i++) {
+          d  = seaOctave((uv + seaTime) * freq, choppy);
+          d += seaOctave((uv - seaTime * 0.85) * freq, choppy);
+          h += d * amp;
+          uv *= OCTAVE_M;
+          freq *= 1.92;
+          amp  *= 0.22;
+          choppy = mix(choppy, 1.0, 0.2);
+        }
+        return p.y - h;
+      }
+
+      // --- Analytical / Adaptive Surface Normal & Curvature ---
+      vec3 getNormal(vec3 p, float eps, out float curvature) {
+        vec3 n;
+        float c = mapDetailed(p);
+        float hx = mapDetailed(vec3(p.x + eps, p.y, p.z));
+        float hz = mapDetailed(vec3(p.x, p.y, p.z + eps));
+        n.y = c;
+        n.x = hx - c;
+        n.z = hz - c;
+        n.y = eps;
+
+        // Estimate local crest sharpness for foam generation
+        float hx2 = mapDetailed(vec3(p.x - eps, p.y, p.z));
+        float hz2 = mapDetailed(vec3(p.x, p.y, p.z - eps));
+        curvature = clamp(((hx + hx2 + hz + hz2) - 4.0 * c) / (eps * 1.4), 0.0, 1.0);
+
+        return normalize(n);
+      }
+
+      // --- Physical Rayleigh + Mie Sky Model ---
+      vec3 getSkyColor(vec3 rd) {
+        vec3 sunDir = normalize(uSunDir);
+        float sunAlt = sunDir.y;
+        float y = max(rd.y, 0.0);
+
+        // Day / Sunset / Night atmospheric transition
+        float dayFactor    = clamp(sunAlt * 2.5 + 0.15, 0.0, 1.0);
+        float sunsetFactor = clamp(1.0 - abs(sunAlt - 0.12) * 3.8, 0.0, 1.0);
+
+        vec3 zenithDay    = vec3(0.08, 0.24, 0.56);
+        vec3 zenithSunset = vec3(0.11, 0.16, 0.34);
+        vec3 zenithNight  = vec3(0.01, 0.02, 0.05);
+
+        vec3 horizDay     = vec3(0.55, 0.76, 0.95);
+        vec3 horizSunset  = vec3(0.95, 0.42, 0.18);
+        vec3 horizNight   = vec3(0.03, 0.06, 0.12);
+
+        vec3 zenith = mix(zenithNight, mix(zenithDay, zenithSunset, sunsetFactor * 0.7), dayFactor);
+        vec3 horiz  = mix(horizNight,  mix(horizDay,  horizSunset,  sunsetFactor),       dayFactor);
+
+        vec3 sky = mix(horiz, zenith, pow(y, 0.42));
+
+        // Mie solar aureole & sun disk
+        float sunDot = max(dot(rd, sunDir), 0.0);
+        vec3 sunColor = mix(vec3(1.0, 0.38, 0.10), vec3(1.0, 0.95, 0.85), clamp(sunAlt * 2.2, 0.0, 1.0));
+        if (sunAlt < 0.0) {
+          // Moonlit silver glow when below horizon
+          sunColor = vec3(0.55, 0.70, 0.95) * 0.35;
+        }
+
+        sky += sunColor * pow(sunDot, 8.0) * 0.35;
+        sky += sunColor * pow(sunDot, 96.0) * 0.95;
+        sky += sunColor * smoothstep(0.9996, 0.99992, sunDot) * 4.5;
+
+        // Subtle horizon atmospheric scatter band
+        sky = mix(sky, horiz * 1.08, pow(1.0 - y, 12.0) * 0.5);
+        return sky;
+      }
+
+      // --- Sphere-Assisted Heightfield Raymarching ---
+      float traceOcean(vec3 ro, vec3 rd, out vec3 hitPos) {
+        float tm = 0.0;
+        float tx = 1200.0;
+
+        // Fast upper-bound check
+        float hx = mapGeometry(ro + rd * tx);
+        if (hx > 0.0) {
+          hitPos = ro + rd * tx;
+          return -1.0;
+        }
+
+        float hm = mapGeometry(ro + rd * tm);
+        float tmid = 0.0;
+
+        for (int i = 0; i < NUM_STEPS; i++) {
+          tmid = mix(tm, tx, hm / (hm - hx));
+          hitPos = ro + rd * tmid;
+          float hmid = mapGeometry(hitPos);
+          if (hmid < 0.0) {
+            tx = tmid;
+            hx = hmid;
+          } else {
+            tm = tmid;
+            hm = hmid;
+          }
+        }
+        return tmid;
+      }
+
+      // --- Complete Ocean Surface Shading ---
+      vec3 shadeOcean(vec3 p, vec3 n, vec3 ld, vec3 vd, vec3 distVec, float curvature) {
+        float dist2 = dot(distVec, distVec);
+        float dist  = sqrt(dist2);
+
+        // Schlick Fresnel (IOR = 1.333 -> F0 = 0.02)
+        float ndotv   = max(dot(n, -vd), 0.0);
+        float fresnel = 0.02 + 0.98 * pow(1.0 - ndotv, 5.0);
+        fresnel = clamp(fresnel, 0.0, 1.0);
+
+        // Reflected sky ray (prevent downward reflection self-intersections)
+        vec3 reflDir = reflect(vd, n);
+        reflDir.y = max(reflDir.y, 0.015);
+        vec3 reflectedSky = getSkyColor(normalize(reflDir));
+
+        // Deep water absorption + diffuse body scatter
+        float diffuse = pow(dot(n, ld) * 0.4 + 0.6, 3.0);
+        vec3 waterBody = uDeepColor + diffuse * uWaterTint * 0.14;
+
+        // Subsurface Scattering (SSS) through thin sunlit wave crests
+        float waveElevation = clamp((p.y - uSeaHeight * 0.35) / max(uSeaHeight * 1.4, 0.01), 0.0, 1.0);
+        float backLight     = pow(max(dot(vd, ld - n * 0.65), 0.0), 3.0);
+        float forwardScatter = max(0.0, dot(-vd, n));
+        vec3 sssColor = vec3(0.04, 0.62, 0.56) * (backLight * 0.9 + 0.25) * waveElevation * (0.35 + 0.65 * forwardScatter);
+        waterBody += sssColor * uSSSIntensity * clamp(ld.y * 3.0 + 0.3, 0.1, 1.2);
+
+        // Combine water transmission and sky reflection via Fresnel
+        vec3 color = mix(waterBody, reflectedSky, fresnel);
+
+        // Dual-lobe solar specular glints (sharp sun path + micro-glitter)
+        vec3 halfVec = normalize(ld - vd);
+        float ndoth  = max(dot(n, halfVec), 0.0);
+        float sunVis = clamp(ld.y * 4.0 + 0.2, 0.05, 1.0);
+        vec3 sunSpecColor = mix(vec3(1.0, 0.48, 0.18), vec3(1.0, 0.96, 0.88), clamp(ld.y * 2.0, 0.0, 1.0));
+
+        float specTight = pow(ndoth, 520.0) * 3.8;
+        float specBroad = pow(ndoth, 48.0)  * 0.22;
+        color += sunSpecColor * (specTight + specBroad) * sunVis;
+
+        // Procedural whitecap & lacy wave crest foam
+        float foamNoise = noise(p.xz * 2.8 + uTime * 0.4) * 0.5 + 0.5;
+        float foamMask  = smoothstep(0.32, 0.85, waveElevation * 0.75 + curvature * 0.65) * uFoamIntensity;
+        foamMask *= smoothstep(0.2, 0.75, foamNoise + curvature * 0.4);
+        foamMask *= 1.0 / (1.0 + dist * 0.012); // Fade fine foam at horizon
+
+        vec3 foamColor = mix(vec3(0.75, 0.84, 0.90), vec3(0.98, 0.97, 0.95), clamp(ld.y * 2.0 + 0.3, 0.0, 1.0));
+        color = mix(color, foamColor, clamp(foamMask, 0.0, 0.88));
+
+        // Distance atmospheric perspective / horizon mist blend
+        vec3 horizonSky = getSkyColor(normalize(vec3(vd.x, 0.005, vd.z)));
+        float fogFactor = exp(-dist * 0.0022);
+        color = mix(horizonSky, color, clamp(fogFactor, 0.0, 1.0));
+
+        return color;
+      }
+
+      // --- ACES Filmic Tone Mapping ---
+      vec3 acesToneMap(vec3 x) {
+        const float a = 2.51;
+        const float b = 0.03;
+        const float c = 2.43;
+        const float d = 0.59;
+        const float e = 0.14;
+        return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+      }
+
+      void main() {
+        vec2 uv = (gl_FragCoord.xy / uResolution.xy) * 2.0 - 1.0;
+        uv.x *= uResolution.x / uResolution.y;
+
+        // Construct camera basis with subtle boat roll
+        vec3 ro = uCamPos;
+        vec3 forward = normalize(uCamTarget - ro);
+        vec3 worldUp = vec3(sin(uCamRoll), cos(uCamRoll), 0.0);
+        vec3 right   = normalize(cross(forward, worldUp));
+        vec3 up      = cross(right, forward);
+
+        vec3 rd = normalize(forward * 1.65 + right * uv.x + up * uv.y);
+        vec3 sunDir = normalize(uSunDir);
+
+        vec3 sky = getSkyColor(rd);
+        vec3 finalColor = sky;
+
+        // Only trace ocean when ray points toward or near water plane
+        if (rd.y < 0.18) {
+          vec3 hitPos;
+          float t = traceOcean(ro, rd, hitPos);
+          if (t > 0.0) {
+            vec3 distVec = hitPos - ro;
+            float eps = max(dot(distVec, distVec) * (0.08 / uResolution.x), 0.002);
+            float curvature = 0.0;
+            vec3 normal = getNormal(hitPos, eps, curvature);
+            vec3 seaColor = shadeOcean(hitPos, normal, sunDir, rd, distVec, curvature);
+
+            // Smooth horizon blend
+            float horizonBlend = smoothstep(0.04, -0.015, rd.y);
+            finalColor = mix(sky, seaColor, horizonBlend);
+          }
+        }
+
+        // Filmic tone mapping + gamma correction + subtle vignette
+        finalColor = acesToneMap(finalColor * 1.12);
+        finalColor = pow(finalColor, vec3(1.0 / 2.2));
+
+        vec2 q = gl_FragCoord.xy / uResolution.xy;
+        float vignette = 0.82 + 0.18 * pow(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.25);
+        finalColor *= vignette;
+
+        fragColor = vec4(finalColor, 1.0);
+      }
+    `;
+
+    // =========================================================================
+    // 2. SHADER COMPILATION & UNIFORM LOCATIONS
+    // =========================================================================
+    function createShader(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error('Shader compilation error:', gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+      }
+      return shader;
+    }
+
+    const vs = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+    const fs = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+    const program = gl.createProgram();
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error('Program link error:', gl.getProgramInfoLog(program));
+    }
+
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+
+    const uniforms = {
+      uResolution:   gl.getUniformLocation(program, 'uResolution'),
+      uTime:         gl.getUniformLocation(program, 'uTime'),
+      uCamPos:       gl.getUniformLocation(program, 'uCamPos'),
+      uCamTarget:    gl.getUniformLocation(program, 'uCamTarget'),
+      uCamRoll:      gl.getUniformLocation(program, 'uCamRoll'),
+      uSeaHeight:    gl.getUniformLocation(program, 'uSeaHeight'),
+      uSeaChoppy:    gl.getUniformLocation(program, 'uSeaChoppy'),
+      uSeaSpeed:     gl.getUniformLocation(program, 'uSeaSpeed'),
+      uSeaFreq:      gl.getUniformLocation(program, 'uSeaFreq'),
+      uSunDir:       gl.getUniformLocation(program, 'uSunDir'),
+      uSSSIntensity: gl.getUniformLocation(program, 'uSSSIntensity'),
+      uFoamIntensity:gl.getUniformLocation(program, 'uFoamIntensity'),
+      uDeepColor:    gl.getUniformLocation(program, 'uDeepColor'),
+      uWaterTint:    gl.getUniformLocation(program, 'uWaterTint')
+    };
+
+    // =========================================================================
+    // 3. SIMULATION STATE, PRESETS & INTERACTIVE CAMERA
+    // =========================================================================
+    const state = {
+      seaHeight: 0.65,
+      seaChoppy: 4.2,
+      seaSpeed: 0.85,
+      seaFreq: 0.16,
+      sunElevation: 14, // degrees
+      sunAzimuth: 195,  // degrees
+      sssIntensity: 1.0,
+      foamIntensity: 0.85,
+      deepColor: [0.008, 0.045, 0.095],
+      waterTint: [0.35, 0.68, 0.58],
+      boatBob: true,
+      renderScale: 1.0,
+
+      // Camera spherical / world coordinates
+      camX: 0.0,
+      camY: 3.6,
+      camZ: 0.0,
+      yaw: 1.83,    // radians (facing toward sun initially)
+      pitch: -0.07  // radians
+    };
+
+    const presets = {
+      golden: {
+        seaHeight: 0.65, seaChoppy: 4.2, seaSpeed: 0.85, seaFreq: 0.16,
+        sunElevation: 14, sunAzimuth: 195, sssIntensity: 1.15, foamIntensity: 0.85,
+        deepColor: [0.008, 0.045, 0.095], waterTint: [0.35, 0.68, 0.58]
+      },
+      tropical: {
+        seaHeight: 0.42, seaChoppy: 3.1, seaSpeed: 0.70, seaFreq: 0.18,
+        sunElevation: 52, sunAzimuth: 170, sssIntensity: 1.65, foamIntensity: 0.55,
+        deepColor: [0.005, 0.12, 0.24], waterTint: [0.12, 0.88, 0.78]
+      },
+      storm: {
+        seaHeight: 1.25, seaChoppy: 6.8, seaSpeed: 1.55, seaFreq: 0.13,
+        sunElevation: 6, sunAzimuth: 215, sssIntensity: 0.65, foamIntensity: 1.55,
+        deepColor: [0.012, 0.028, 0.045], waterTint: [0.22, 0.35, 0.38]
+      },
+      moonlight: {
+        seaHeight: 0.55, seaChoppy: 3.8, seaSpeed: 0.65, seaFreq: 0.16,
+        sunElevation: -2, sunAzimuth: 190, sssIntensity: 0.45, foamIntensity: 0.65,
+        deepColor: [0.003, 0.012, 0.032], waterTint: [0.15, 0.30, 0.48]
+      }
+    };
+
+    // Mouse / Touch Look Controls
+    let isDragging = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+    const keys = {};
+
+    canvas.addEventListener('pointerdown', (e) => {
+      isDragging = true;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - lastMouseX;
+      const dy = e.clientY - lastMouseY;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+
+      state.yaw   -= dx * 0.0045;
+      state.pitch  = Math.max(-1.1, Math.min(0.65, state.pitch - dy * 0.0045));
+    });
+
+    window.addEventListener('pointerup', () => {
+      isDragging = false;
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      state.camY = Math.max(1.4, Math.min(28.0, state.camY + e.deltaY * 0.006));
+    }, { passive: false });
+
+    window.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+      if (e.code === 'KeyH') {
+        document.getElementById('ui-container').classList.toggle('hidden');
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+    });
+
+    // =========================================================================
+    // 4. UI BINDINGS
+    // =========================================================================
+    function bindSlider(id, valId, key, formatter) {
+      const el = document.getElementById(id);
+      const valEl = document.getElementById(valId);
+      el.addEventListener('input', () => {
+        state[key] = parseFloat(el.value);
+        valEl.textContent = formatter(state[key]);
+      });
+    }
+
+    bindSlider('ctrl-height', 'val-height', 'seaHeight', v => v.toFixed(2) + ' m');
+    bindSlider('ctrl-choppy', 'val-choppy', 'seaChoppy', v => v.toFixed(1));
+    bindSlider('ctrl-speed',  'val-speed',  'seaSpeed',  v => v.toFixed(2));
+    bindSlider('ctrl-freq',   'val-freq',   'seaFreq',   v => v.toFixed(2));
+    bindSlider('ctrl-sun-el', 'val-sun-el', 'sunElevation', v => Math.round(v) + '°');
+    bindSlider('ctrl-sun-az', 'val-sun-az', 'sunAzimuth',   v => Math.round(v) + '°');
+    bindSlider('ctrl-sss',    'val-sss',    'sssIntensity', v => v.toFixed(2));
+    bindSlider('ctrl-foam',   'val-foam',   'foamIntensity',v => v.toFixed(2));
+
+    document.getElementById('ctrl-bob').addEventListener('change', (e) => {
+      state.boatBob = e.target.checked;
+    });
+
+    document.getElementById('ctrl-quality').addEventListener('change', (e) => {
+      state.renderScale = parseFloat(e.target.value);
+      resizeCanvas();
+    });
+
+    document.querySelectorAll('[data-preset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-preset]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const p = presets[btn.dataset.preset];
+        Object.assign(state, p);
+
+        // Sync UI Sliders
+        document.getElementById('ctrl-height').value = state.seaHeight;
+        document.getElementById('val-height').textContent = state.seaHeight.toFixed(2) + ' m';
+        document.getElementById('ctrl-choppy').value = state.seaChoppy;
+        document.getElementById('val-choppy').textContent = state.seaChoppy.toFixed(1);
+        document.getElementById('ctrl-speed').value = state.seaSpeed;
+        document.getElementById('val-speed').textContent = state.seaSpeed.toFixed(2);
+        document.getElementById('ctrl-freq').value = state.seaFreq;
+        document.getElementById('val-freq').textContent = state.seaFreq.toFixed(2);
+        document.getElementById('ctrl-sun-el').value = state.sunElevation;
+        document.getElementById('val-sun-el').textContent = Math.round(state.sunElevation) + '°';
+        document.getElementById('ctrl-sun-az').value = state.sunAzimuth;
+        document.getElementById('val-sun-az').textContent = Math.round(state.sunAzimuth) + '°';
+        document.getElementById('ctrl-sss').value = state.sssIntensity;
+        document.getElementById('val-sss').textContent = state.sssIntensity.toFixed(2);
+        document.getElementById('ctrl-foam').value = state.foamIntensity;
+        document.getElementById('val-foam').textContent = state.foamIntensity.toFixed(2);
+      });
+    });
+
+    document.getElementById('btn-reset-cam').addEventListener('click', () => {
+      state.camX = 0.0;
+      state.camY = 3.6;
+      state.camZ = 0.0;
+      state.yaw  = (state.sunAzimuth * Math.PI) / 180.0;
+      state.pitch = -0.07;
+    });
+
+    document.getElementById('btn-fullscreen').addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    // =========================================================================
+    // 5. RESIZE & MAIN RENDER LOOP
+    // =========================================================================
+    function resizeCanvas() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2) * state.renderScale;
+      canvas.width  = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    let lastTime = performance.now();
+    let frameCount = 0;
+    let fpsTimer = 0;
+    const fpsBadge = document.getElementById('fps-counter');
+
+    function render(now) {
+      const dt = Math.min((now - lastTime) * 0.001, 0.1);
+      lastTime = now;
+      const t = now * 0.001;
+
+      // FPS Counter
+      frameCount++;
+      fpsTimer += dt;
+      if (fpsTimer >= 0.5) {
+        fpsBadge.textContent = Math.round(frameCount / fpsTimer) + ' FPS';
+        frameCount = 0;
+        fpsTimer = 0;
+      }
+
+      // WASD / Arrow Gliding over the Ocean
+      const moveSpeed = 7.5 * dt;
+      const fwdX = Math.sin(state.yaw);
+      const fwdZ = Math.cos(state.yaw);
+      const rightX = Math.cos(state.yaw);
+      const rightZ = -Math.sin(state.yaw);
+
+      if (keys['KeyW'] || keys['ArrowUp'])    { state.camX += fwdX * moveSpeed; state.camZ += fwdZ * moveSpeed; }
+      if (keys['KeyS'] || keys['ArrowDown'])  { state.camX -= fwdX * moveSpeed; state.camZ -= fwdZ * moveSpeed; }
+      if (keys['KeyD'] || keys['ArrowRight']) { state.camX += rightX * moveSpeed; state.camZ += rightZ * moveSpeed; }
+      if (keys['KeyA'] || keys['ArrowLeft'])  { state.camX -= rightX * moveSpeed; state.camZ -= rightZ * moveSpeed; }
+
+      // Optional forward drift & physical wave bobbing
+      const driftZ = t * 1.4;
+      let bobY = 0.0;
+      let rollAngle = 0.0;
+      if (state.boatBob) {
+        const wavePhase = t * state.seaSpeed * 1.6;
+        bobY = (Math.sin(wavePhase) * 0.28 + Math.cos(wavePhase * 0.63) * 0.15) * state.seaHeight;
+        rollAngle = Math.sin(wavePhase * 0.85) * 0.022 * state.seaHeight;
+      }
+
+      const posX = state.camX;
+      const posY = Math.max(1.25, state.camY + bobY);
+      const posZ = state.camZ + driftZ;
+
+      const lookX = posX + Math.sin(state.yaw) * Math.cos(state.pitch);
+      const lookY = posY + Math.sin(state.pitch);
+      const lookZ = posZ + Math.cos(state.yaw) * Math.cos(state.pitch);
+
+      // Compute Sun Direction Vector from Elevation & Azimuth
+      const elRad = (state.sunElevation * Math.PI) / 180.0;
+      const azRad = (state.sunAzimuth * Math.PI) / 180.0;
+      const sunX = Math.sin(azRad) * Math.cos(elRad);
+      const sunY = Math.sin(elRad);
+      const sunZ = Math.cos(azRad) * Math.cos(elRad);
+
+      // Draw Full-Screen Raymarched Ocean
+      gl.useProgram(program);
+      gl.bindVertexArray(vao);
+
+      gl.uniform2f(uniforms.uResolution, canvas.width, canvas.height);
+      gl.uniform1f(uniforms.uTime, t);
+      gl.uniform3f(uniforms.uCamPos, posX, posY, posZ);
+      gl.uniform3f(uniforms.uCamTarget, lookX, lookY, lookZ);
+      gl.uniform1f(uniforms.uCamRoll, rollAngle);
+
+      gl.uniform1f(uniforms.uSeaHeight, state.seaHeight);
+      gl.uniform1f(uniforms.uSeaChoppy, state.seaChoppy);
+      gl.uniform1f(uniforms.uSeaSpeed, state.seaSpeed);
+      gl.uniform1f(uniforms.uSeaFreq, state.seaFreq);
+      gl.uniform3f(uniforms.uSunDir, sunX, sunY, sunZ);
+      gl.uniform1f(uniforms.uSSSIntensity, state.sssIntensity);
+      gl.uniform1f(uniforms.uFoamIntensity, state.foamIntensity);
+      gl.uniform3fv(uniforms.uDeepColor, state.deepColor);
+      gl.uniform3fv(uniforms.uWaterTint, state.waterTint);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
